@@ -196,18 +196,18 @@ def FineNetmodel(num_classes = 2, pretrained_path = None, input_shape = None):
     x = GlobalAveragePooling2D(name='avg_pool')(x)
     x = Dense(num_classes, activation='softmax', name='predictions')(x)
 
-
     inputs = img_input
 
     # Create model
     model = Model(inputs, x, name='FineNet')
 
     # Load weights
-    if pretrained_path != None:
-        print 'Loading FineNet weights from %s'%(pretrained_path)
+    if pretrained_path is not None:
+        print('Loading FineNet weights from %s' % (pretrained_path))
         model.load_weights(pretrained_path)
 
     return model
+
 
 def plot_confusion_matrix(cm, classes,
                           normalize=False,

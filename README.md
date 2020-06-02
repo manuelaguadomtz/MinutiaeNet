@@ -83,3 +83,14 @@ To help understanding MinutiaeNet, there are 2 notebooks for you to play around:
 
 Python files which can run directly from command line are also provided.
 Note that models as well as architectures here are slightly different from the paper because of the continuing development of this project
+
+# Usage Python3
+
+Installing module future
+
+    pip install future
+
+Running CoarseNet
+    
+    cd CoarseNet
+    python CoarseNet_run.py
