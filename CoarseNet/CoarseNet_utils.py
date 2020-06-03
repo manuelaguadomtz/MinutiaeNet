@@ -85,11 +85,17 @@ def sub_load_data(data, img_size, aug):
     mnt = mnt[(8<=mnt[:,0])*(mnt[:,0]<img_size[1]-8)*(8<=mnt[:, 1])*(mnt[:,1]<img_size[0]-8), :]
     return img, seg, ali, mnt
 
+
 use_multiprocessing = False
-def load_data(dataset, tra_ori_model, rand=False, aug=0.0, batch_size=1, sample_rate=None):
+
+
+def load_data(dataset, tra_ori_model, rand=False, aug=0.0, batch_size=1,
+              sample_rate=None):
 
     if type(dataset[0]) == str:
-        img_name, folder_name, img_size = get_maximum_img_size_and_names(dataset, sample_rate)
+        img_name, folder_name, img_size = get_maximum_img_size_and_names(
+            dataset, sample_rate
+        )
     else:
         img_name, folder_name, img_size = dataset
 
@@ -99,7 +105,7 @@ def load_data(dataset, tra_ori_model, rand=False, aug=0.0, batch_size=1, sample_
         img_name = img_name[rand_idx]
         folder_name = folder_name[rand_idx]
 
-    if batch_size > 1 and use_multiprocessing==True:
+    if batch_size > 1 and use_multiprocessing is True:
         p = Pool(batch_size)
 
     p_sub_load_data = partial(sub_load_data, img_size=img_size, aug=aug)
@@ -110,15 +116,22 @@ def load_data(dataset, tra_ori_model, rand=False, aug=0.0, batch_size=1, sample_
         segment = np.zeros((batch_size, img_size[0], img_size[1], 1))
         alignment = np.zeros((batch_size, img_size[0], img_size[1], 1))
 
-        minutiae_w = np.zeros((batch_size, img_size[0] // 8, img_size[1] // 8, 1)) - 1
-        minutiae_h = np.zeros((batch_size, img_size[0] // 8, img_size[1] // 8, 1)) - 1
-        minutiae_o = np.zeros((batch_size, img_size[0] // 8, img_size[1] // 8, 1)) - 1
+        minutiae_w = np.zeros((batch_size, img_size[0] // 8,
+                               img_size[1] // 8, 1)) - 1
+        minutiae_h = np.zeros((batch_size, img_size[0] // 8,
+                               img_size[1] // 8, 1)) - 1
+        minutiae_o = np.zeros((batch_size, img_size[0] // 8,
+                               img_size[1] // 8, 1)) - 1
 
-        batch_name = [img_name[(i + j) % len(img_name)] for j in range(batch_size)]
-        batch_f_name = [folder_name[(i + j) % len(img_name)] for j in range(batch_size)]
+        batch_name = [img_name[(i + j) % len(img_name)]
+                      for j in range(batch_size)]
+        batch_f_name = [folder_name[(i + j) % len(img_name)]
+                        for j in range(batch_size)]
 
         if batch_size > 1 and use_multiprocessing is True:
-            results = list(p.map(p_sub_load_data, zip(batch_name, batch_f_name)))
+            results = list(
+                p.map(p_sub_load_data, zip(batch_name, batch_f_name))
+            )
         else:
             results = list(map(p_sub_load_data, zip(batch_name, batch_f_name)))
 
@@ -129,57 +142,77 @@ def load_data(dataset, tra_ori_model, rand=False, aug=0.0, batch_size=1, sample_
             image[j, :, :, 0] = img / 255.0
             segment[j, :, :, 0] = seg / 255.0
             alignment[j, :, :, 0] = ali / 255.0
-            minutiae_w[j, (mnt[:, 1]/8).astype(int), (mnt[:, 0]/8).astype(int), 0] = mnt[:, 0] % 8
-            minutiae_h[j, (mnt[:, 1]/8).astype(int), (mnt[:, 0]/8).astype(int), 0] = mnt[:, 1] % 8
-            minutiae_o[j, (mnt[:, 1]/8).astype(int), (mnt[:, 0]/8).astype(int), 0] = mnt[:, 2]
+            minutiae_w[
+                j,
+                (mnt[:, 1] // 8).astype(int),
+                (mnt[:, 0] // 8).astype(int),
+                0
+            ] = mnt[:, 0] % 8
+            minutiae_h[
+                j,
+                (mnt[:, 1] // 8).astype(int),
+                (mnt[:, 0] // 8).astype(int),
+                0
+            ] = mnt[:, 1] % 8
+            minutiae_o[
+                j,
+                (mnt[:, 1] // 8).astype(int),
+                (mnt[:, 0] // 8).astype(int),
+                0
+            ] = mnt[:, 2]
 
         # get seg
         label_seg = segment[:, ::8, ::8, :]
-        label_seg[label_seg>0] = 1
-        label_seg[label_seg<=0] = 0
-        minutiae_seg = (minutiae_o!=-1).astype(float)
+        label_seg[label_seg > 0] = 1
+        label_seg[label_seg <= 0] = 0
+        minutiae_seg = (minutiae_o != -1).astype(float)
 
         # get ori & mnt
         orientation = tra_ori_model.predict(alignment)
-        orientation = orientation/np.pi*180+90
-        orientation[orientation>=180.0] = 0.0 # orientation [0, 180)
-        minutiae_o = minutiae_o/np.pi*180+90 # [90, 450)
-        minutiae_o[minutiae_o>360] = minutiae_o[minutiae_o>360]-360 # to current coordinate system [0, 360)
-        minutiae_ori_o = np.copy(minutiae_o) # copy one
-        minutiae_ori_o[minutiae_ori_o>=180] = minutiae_ori_o[minutiae_ori_o>=180]-180 # for strong ori label [0,180)
+        orientation = orientation / np.pi * 180 + 90
+        orientation[orientation >= 180.0] = 0.0  # orientation [0, 180)
+        minutiae_o = minutiae_o / np.pi * 180 + 90  # [90, 450)
+        # to current coordinate system [0, 360)
+        minutiae_o[minutiae_o > 360] = minutiae_o[minutiae_o > 360] - 360
+        minutiae_ori_o = np.copy(minutiae_o)  # copy one
+        # for strong ori label [0,180)
+        ind = minutiae_ori_o >= 180
+        minutiae_ori_o[ind] = minutiae_ori_o[ind] - 180
 
         # ori 2 gaussian
         gaussian_pdf = signal.gaussian(361, 3)
-        y = np.reshape(np.arange(1, 180, 2), [1,1,1,-1])
+        y = np.reshape(np.arange(1, 180, 2), [1, 1, 1, -1])
         delta = np.array(np.abs(orientation - y), dtype=int)
-        delta = np.minimum(delta, 180-delta)+180
+        delta = np.minimum(delta, 180 - delta) + 180
         label_ori = gaussian_pdf[delta]
 
         # ori_o 2 gaussian
         delta = np.array(np.abs(minutiae_ori_o - y), dtype=int)
-        delta = np.minimum(delta, 180-delta)+180
+        delta = np.minimum(delta, 180 - delta) + 180
         label_ori_o = gaussian_pdf[delta]
 
         # mnt_o 2 gaussian
-        y = np.reshape(np.arange(1, 360, 2), [1,1,1,-1])
+        y = np.reshape(np.arange(1, 360, 2), [1, 1, 1, -1])
         delta = np.array(np.abs(minutiae_o - y), dtype=int)
-        delta = np.minimum(delta, 360-delta)+180
+        delta = np.minimum(delta, 360 - delta) + 180
         label_mnt_o = gaussian_pdf[delta]
 
         # w 2 gaussian
         gaussian_pdf = signal.gaussian(17, 2)
-        y = np.reshape(np.arange(0, 8), [1,1,1,-1])
-        delta = (minutiae_w-y+8).astype(int)
+        y = np.reshape(np.arange(0, 8), [1, 1, 1, -1])
+        delta = (minutiae_w - y + 8).astype(int)
         label_mnt_w = gaussian_pdf[delta]
 
         # h 2 gaussian
-        delta = (minutiae_h-y+8).astype(int)
+        delta = (minutiae_h - y + 8).astype(int)
         label_mnt_h = gaussian_pdf[delta]
 
         # mnt cls label -1:neg, 0:no care, 1:pos
         label_mnt_s = np.copy(minutiae_seg)
-        label_mnt_s[label_mnt_s==0] = -1 # neg to -1
-        label_mnt_s = (label_mnt_s+ndimage.maximum_filter(label_mnt_s, size=(1,3,3,1)))/2 # around 3*3 pos -> 0
+        label_mnt_s[label_mnt_s == 0] = -1  # neg to -1
+        # around 3*3 pos -> 0
+        label_mnt_s = (label_mnt_s + ndimage.maximum_filter(
+            label_mnt_s, size=(1, 3, 3, 1))) / 2
 
         # apply segmentation
         label_ori = label_ori * label_seg * have_alignment
@@ -187,12 +220,17 @@ def load_data(dataset, tra_ori_model, rand=False, aug=0.0, batch_size=1, sample_
         label_mnt_o = label_mnt_o * minutiae_seg
         label_mnt_w = label_mnt_w * minutiae_seg
         label_mnt_h = label_mnt_h * minutiae_seg
-        yield image, label_ori, label_ori_o, label_seg, label_mnt_w, label_mnt_h, label_mnt_o, label_mnt_s, batch_name
+        yield (
+            image, label_ori, label_ori_o, label_seg,
+            label_mnt_w, label_mnt_h, label_mnt_o,
+            label_mnt_s, batch_name
+        )
 
-    if batch_size > 1 and use_multiprocessing==True:
+    if batch_size > 1 and use_multiprocessing is True:
         p.close()
         p.join()
     return
+
 
 def merge_mul(x):
     return reduce(lambda x,y:x*y, x)
@@ -370,10 +408,13 @@ def get_tra_ori():
     theta = Lambda(orientation)(img_input)
     model = Model(inputs=[img_input, ], outputs=[theta, ])
     return model
+
+
 tra_ori_model = get_tra_ori()
 
 
-def get_maximum_img_size_and_names(dataset, sample_rate=None, max_size=None):
+def get_maximum_img_size_and_names(dataset, sample_rate=None,
+                                   max_size=None, iext='.bmp'):
 
     if isinstance(dataset, basestring):
         dataset = [dataset]
@@ -382,14 +423,14 @@ def get_maximum_img_size_and_names(dataset, sample_rate=None, max_size=None):
     img_name, folder_name, img_size = [], [], []
 
     for folder, rate in zip(dataset, sample_rate):
-        _, img_name_t = get_files_in_folder(folder, 'img_files/*' + '.bmp')
+        _, img_name_t = get_files_in_folder(folder, 'img_files/*' + iext)
         img_name.extend(img_name_t.tolist() * rate)
         folder_name.extend([folder] * img_name_t.shape[0] * rate)
 
         # img_size.append(np.array(misc.imread(
         #     folder + 'img_files/' + img_name_t[0] + '.bmp', mode='L').shape))
         img_size.append(np.array(cv2.imread(
-            folder + 'img_files/' + img_name_t[0] + '.bmp', 0).shape))
+            folder + 'img_files/' + img_name_t[0] + iext, 0).shape))
 
     img_name = np.asarray(img_name)
     folder_name = np.asarray(folder_name)

@@ -25,25 +25,24 @@ import cv2
 import sys
 import os
 
-sys.path.append(os.path.realpath('../FineNet'))
-from FineNet_model import FineNetmodel
-
 from keras.models import Model
 from keras.layers import Input
 from keras import layers
 from keras.layers.core import Flatten,Activation,Lambda, Dropout
-from keras.layers.convolutional import Conv2D,MaxPooling2D,UpSampling2D,AveragePooling2D
+from keras.layers.convolutional import Conv2D,MaxPooling2D, UpSampling2D, AveragePooling2D
 from keras.layers.normalization import BatchNormalization
 from keras.layers.advanced_activations import PReLU
 from keras.regularizers import l2
 from keras.optimizers import SGD, Adam
 from keras.utils import plot_model
 
-
 import tensorflow as tf
 
 from MinutiaeNet_utils import *
 from LossFunctions import *
+
+sys.path.append(os.path.realpath('../FineNet'))
+from FineNet_model import FineNetmodel
 
 
 def conv_bn(bottom, w_size, name, strides=(1, 1), dilation_rate=(1, 1)):
@@ -625,21 +624,18 @@ def fuse_minu_orientation(dir_map, mnt, mode=1,block_size=16):
 
 
 def deploy_with_GT(deploy_set, output_dir, model_path,
-                   FineNet_path=None, set_name=None):
-    if set_name is None:
-        set_name = deploy_set.split('/')[-2]
+                   FineNet_path=None, isHavingFineNet=False,
+                   iext='.bmp'):
 
     # Read image and GT
-    img_name, folder_name, img_size = get_maximum_img_size_and_names(deploy_set)
+    info = get_maximum_img_size_and_names(deploy_set, iext=iext)
+    img_name, folder_name, img_size = info
 
-    mkdir(output_dir + '/' + set_name + '/')
-    mkdir(output_dir + '/' + set_name + '/mnt_results/')
-    mkdir(output_dir + '/' + set_name + '/seg_results/')
-    mkdir(output_dir + '/' + set_name + '/OF_results/')
+    mkdir(output_dir + '/mnt_results/')
+    mkdir(output_dir + '/seg_results/')
+    mkdir(output_dir + '/OF_results/')
 
-    logging.info("Predicting %s:" % (set_name))
-
-    isHavingFineNet = False
+    # logging.info("Predicting %s:" % (set_name))
 
     main_net_model = CoarseNetmodel((None, None, 1), model_path, mode='deploy')
 
@@ -648,34 +644,40 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
         model_FineNet = FineNetmodel(num_classes=2,
                                      pretrained_path=FineNet_path,
                                      input_shape=(224, 224, 3))
-
         model_FineNet.compile(loss='categorical_crossentropy',
                               optimizer=Adam(lr=0),
                               metrics=['accuracy'])
 
     time_c = []
     ave_prf_nms = []
-    for i, test in enumerate(
-            load_data((img_name, folder_name, img_size), tra_ori_model,
-                      rand=False, aug=0.0, batch_size=1)):
+    data = load_data((img_name, folder_name, img_size), tra_ori_model,
+                     rand=False, aug=0.0, batch_size=1)
+    for i, test in enumerate(data):
 
         print(i, img_name[i])
-        logging.info("%s %d / %d: %s" % (set_name, i + 1,
-                                         len(img_name), img_name[i]))
+        # logging.info("%s %d / %d: %s" % (set_name, i + 1,
+        #                                  len(img_name), img_name[i]))
         time_start = time()
 
         # image = misc.imread(deploy_set + 'img_files/' + img_name[i] + '.bmp',
         #                     mode='L')  # / 255.0
         # mask = misc.imread(deploy_set + 'seg_files/' + img_name[i] + '.bmp',
         #                    mode='L') / 255.0
-        image = cv2.imread(deploy_set + 'img_files/' + img_name[i] + '.bmp', 0)
-        mask = cv2.imread(deploy_set + 'seg_files/' + img_name[i] + '.bmp', 0)
-        mask = mask.astype(np.float32) / 255.0
+        image = cv2.imread(deploy_set + 'img_files/' + img_name[i] + iext, 0)
+
+        try:
+            fname = deploy_set + 'seg_files/' + img_name[i] + iext
+            mask = cv2.imread(fname, 0)
+            mask = mask.astype(np.float32) / 255.0
+            outside_mask = True
+        except:
+            outside_mask = False
 
         img_size = image.shape
         img_size = np.array(img_size, dtype=np.int32) // 8 * 8
         image = image[:img_size[0], :img_size[1]]
-        mask = mask[:img_size[0], :img_size[1]]
+        if outside_mask:
+            mask = mask[:img_size[0], :img_size[1]]
 
         original_image = image.copy()
 
@@ -686,8 +688,10 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
 
         image = np.reshape(image, [1, image.shape[0], image.shape[1], 1])
 
-        enh_img, enh_img_imag, enhance_img, ori_out_1, ori_out_2, seg_out, mnt_o_out, mnt_w_out, mnt_h_out, mnt_s_out \
-            = main_net_model.predict(image)
+        prediction = main_net_model.predict(image)
+        enh_img, enh_img_imag, enhance_img, ori_out_1 = prediction[:4]
+        ori_out_2, seg_out, mnt_o_out, mnt_w_out = prediction[4:8]
+        mnt_h_out, mnt_s_out = prediction[8:10]
 
         time_afterconv = time()
 
@@ -702,8 +706,9 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
         seg_out = cv2.dilate(seg_out, kernel)
 
         # If use mask from outside
-        # seg_out = cv2.resize(mask, dsize=(seg_out.shape[1],
-        #                                    seg_out.shape[0]))
+        if outside_mask:
+            seg_out = cv2.resize(mask, dsize=(seg_out.shape[1],
+                                              seg_out.shape[0]))
 
         mnt_gt = label2mnt(test[7], test[4], test[5], test[6])
 
@@ -726,7 +731,7 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
             if mnt_nms_1.shape[0] > 4 and mnt_nms_2.shape[0] > 4:
                 break
             else:
-                final_minutiae_score_threashold = final_minutiae_score_threashold - 0.05
+                final_minutiae_score_threashold -= 0.05
                 early_minutiae_thres = early_minutiae_thres - 0.05
 
         mnt_nms = fuse_nms(mnt_nms_1, mnt_nms_2)
@@ -762,15 +767,18 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
 
                         # # Can use class as hard decision
                         # # 0: minu  1: non-minu
-                        # [class_Minutiae] = np.argmax(model_FineNet.predict(patch_minu), axis=1)
+                        # [class_Minutiae] = np.argmax(
+                        #    model_FineNet.predict(patch_minu), axis=1)
                         #
                         # if class_Minutiae == 0:
                         #     mnt_refined.append(mnt_nms[idx_minu,:])
 
-                        # Use soft decision: merge FineNet score with CoarseNet score
+                        # Use soft decision: merge FineNet score with
+                        # CoarseNet score
                         [isMinutiaeProb] = model_FineNet.predict(patch_minu)
                         isMinutiaeProb = isMinutiaeProb[0]
-                        # print isMinutiaeProb
+
+                        # print(isMinutiaeProb)
                         tmp_mnt = mnt_nms[idx_minu, :].copy()
                         tmp_mnt[3] = (4 * tmp_mnt[3] + isMinutiaeProb) / 5
                         mnt_refined.append(tmp_mnt)
@@ -783,28 +791,40 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
         mnt_nms = np.array(mnt_refined)
 
         if mnt_nms.shape[0] > 0:
-            mnt_nms = mnt_nms[mnt_nms[:, 3] > final_minutiae_score_threashold, :]
+            ind = mnt_nms[:, 3] > final_minutiae_score_threashold
+            mnt_nms = mnt_nms[ind, :]
 
-        final_mask = ndimage.zoom(np.round(np.squeeze(seg_out)), [8, 8], order=0)
+        final_mask = ndimage.zoom(
+            np.round(np.squeeze(seg_out)), [8, 8], order=0)
 
         # Show the orientation
-        show_orientation_field(original_image, dir_map + np.pi, mask=final_mask,
-                               fname="%s/%s/OF_results/%s_OF.jpg" % (output_dir, set_name, img_name[i]))
+        fname = ("%s/OF_results/%s_OF.jpg" % (output_dir, img_name[i]))
+        show_orientation_field(original_image, dir_map + np.pi,
+                               mask=final_mask, fname=fname)
 
         fuse_minu_orientation(dir_map, mnt_nms, mode=3)
 
         time_afterpost = time()
-        mnt_writer(mnt_nms, img_name[i], img_size, "%s/%s/mnt_results/%s.mnt" % (output_dir, set_name, img_name[i]))
-        draw_minutiae_overlay_with_score(image, mnt_nms, mnt_gt[:, :3], "%s/%s/%s_minu.jpg"%(output_dir, set_name, img_name[i]),saveimage=True)
-        # misc.imsave("%s/%s/%s_score.jpg"%(output_dir, set_name, img_name[i]), np.squeeze(mnt_s_out_upscale))
+        fname = ("%s/mnt_results/%s.mnt" % (output_dir, img_name[i]))
+        mnt_writer(mnt_nms, img_name[i], img_size, fname)
 
-        # misc.imsave("%s/%s/seg_results/%s_seg.jpg" % (output_dir, set_name, img_name[i]), final_mask)
-        cv2.imwrite("%s/%s/seg_results/%s_seg.jpg" % (output_dir, set_name, img_name[i]), final_mask)
+        fname = "%s/%s_minu.jpg" % (output_dir, img_name[i])
+        draw_minutiae_overlay_with_score(image, mnt_nms, mnt_gt[:, :3],
+                                         fname, saveimage=True)
+
+        fname = ("%s/seg_results/%s_seg.jpg" % (output_dir, img_name[i]))
+        cv2.imwrite(fname, final_mask)
 
         time_afterdraw = time()
-        time_c.append([time_afterconv - time_start, time_afterpost - time_afterconv, time_afterdraw - time_afterpost])
+        time_c.append([
+            time_afterconv - time_start,
+            time_afterpost - time_afterconv,
+            time_afterdraw - time_afterpost
+        ])
         logging.info(
-            "load+conv: %.3fs, seg-postpro+nms: %.3f, draw: %.3f" % (time_c[-1][0], time_c[-1][1], time_c[-1][2]))
+            ("load+conv: %.3fs, seg-postpro+nms: %.3f, draw: %.3f" %
+             (time_c[-1][0], time_c[-1][1], time_c[-1][2]))
+        )
 
         # Metrics calculating
         p, r, f, l, o = metric_P_R_F(mnt_gt, mnt_nms)
@@ -813,24 +833,24 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
 
     time_c = np.mean(np.array(time_c), axis=0)
     ave_prf_nms = np.mean(np.array(ave_prf_nms), 0)
-    print("Precision: %f\tRecall: %f\tF1-measure: %f" % (ave_prf_nms[0], ave_prf_nms[1], ave_prf_nms[2]))
+    print("Precision: %f\tRecall: %f\tF1-measure: %f" %
+          (ave_prf_nms[0], ave_prf_nms[1], ave_prf_nms[2]))
 
     logging.info(
-        "Average: load+conv: %.3fs, oir-select+seg-post+nms: %.3f, draw: %.3f" % (time_c[0], time_c[1], time_c[2]))
+        "Average: load+conv: %.3fs, oir-select+seg-"
+        "post+nms: %.3f, draw: %.3f" %
+        (time_c[0], time_c[1], time_c[2])
+    )
     return
 
 
 def inference(deploy_set, output_dir, model_path, FineNet_path=None,
               set_name=None, file_ext='.bmp', isHavingFineNet=False):
-    if set_name is None:
-        set_name = deploy_set.split('/')[-2]
 
-    mkdir(output_dir + '/' + set_name + '/')
-    mkdir(output_dir + '/' + set_name + '/mnt_results/')
-    mkdir(output_dir + '/' + set_name + '/seg_results/')
-    mkdir(output_dir + '/' + set_name + '/OF_results/')
-
-    logging.info("Predicting %s:" % (set_name))
+    mkdir(output_dir + '/')
+    mkdir(output_dir + '/mnt_results/')
+    mkdir(output_dir + '/seg_results/')
+    mkdir(output_dir + '/OF_results/')
 
     _, img_name = get_files_in_folder(deploy_set + 'img_files/', file_ext)
     print(deploy_set)
@@ -856,16 +876,16 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
     for i in range(0, len(img_name)):
         print(i)
 
-        # image = misc.imread(deploy_set + 'img_files/' + img_name[i] + file_ext, mode='L')  # / 255.0
-        image = cv2.imread(deploy_set + 'img_files/' + img_name[i] + file_ext, 0)
+        fname = deploy_set + 'img_files/' + img_name[i] + file_ext
+        image = cv2.imread(fname, 0)
 
         img_size = image.shape
         img_size = np.array(img_size, dtype=np.int32) // 8 * 8
 
         # read the mask from files
         try:
-            # mask = misc.imread(deploy_set + 'seg_files/' + img_name[i] + '.jpg', mode='L') / 255.0
-            mask = cv2.imread(deploy_set + 'seg_files/' + img_name[i] + '.jpg', 0) / 255.0
+            fname = deploy_set + 'seg_files/' + img_name[i] + '.jpg'
+            mask = cv2.imread(fname, 0) / 255.0
         except:
             mask = np.ones((img_size[0], img_size[1]))
 
@@ -875,17 +895,22 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
         original_image = image.copy()
 
         texture_img = FastEnhanceTexture(image, sigma=2.5, show=False)
-        dir_map, fre_map = get_maps_STFT(texture_img, patch_size=64, block_size=16, preprocess=True)
+        dir_map, fre_map = get_maps_STFT(
+            texture_img, patch_size=64, block_size=16, preprocess=True)
 
-        image = image*mask
+        image = image * mask
 
-        logging.info("%s %d / %d: %s" % (set_name, i + 1, len(img_name), img_name[i]))
+        logging.info("%s %d / %d: %s" % (set_name, i + 1, len(img_name),
+                                         img_name[i]))
         time_start = time()
 
         image = np.reshape(image, [1, image.shape[0], image.shape[1], 1])
 
-        enh_img, enh_img_imag, enhance_img, ori_out_1, ori_out_2, seg_out, mnt_o_out, mnt_w_out, mnt_h_out, mnt_s_out \
-            = main_net_model.predict(image)
+        prediction = main_net_model.predict(image)
+        enh_img, enh_img_imag, enhance_img, ori_out_1 = prediction[:4]
+        ori_out_2, seg_out, mnt_o_out, mnt_w_out = prediction[4:8]
+        mnt_h_out, mnt_s_out = prediction[8:10]
+
         time_afterconv = time()
 
         # If use mask from model
@@ -899,7 +924,8 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
         seg_out = cv2.dilate(seg_out, kernel)
 
         # If use mask from outside
-        # seg_out = cv2.resize(mask, dsize=(seg_out.shape[1], seg_out.shape[0]))
+        # seg_out = cv2.resize(mask, dsize=(seg_out.shape[1],
+        #                                    seg_out.shape[0]))
 
         max_num_minu = 20
         min_num_minu = 6
@@ -923,8 +949,10 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
 
         # Sort minutiae by score
         while early_minutiae_thres > 0:
-            mnt_nms_1 = mnt_nms_1_copy[mnt_nms_1_copy[:, 3] > early_minutiae_thres, :]
-            mnt_nms_2 = mnt_nms_2_copy[mnt_nms_2_copy[:, 3] > early_minutiae_thres, :]
+            mnt_nms_1 = mnt_nms_1_copy[
+                mnt_nms_1_copy[:, 3] > early_minutiae_thres, :]
+            mnt_nms_2 = mnt_nms_2_copy[
+                mnt_nms_2_copy[:, 3] > early_minutiae_thres, :]
 
             if mnt_nms_1.shape[0] > max_num_minu or mnt_nms_2.shape[0] > max_num_minu:
                 mnt_nms_1 = mnt_nms_1[:max_num_minu, :]
@@ -950,12 +978,19 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
                         # Extract patch from image
                         x_begin = int(mnt_nms[idx_minu, 1]) - patch_minu_radio
                         y_begin = int(mnt_nms[idx_minu, 0]) - patch_minu_radio
-                        patch_minu = original_image[x_begin:x_begin + 2 * patch_minu_radio,
-                                                    y_begin:y_begin + 2 * patch_minu_radio]
+                        patch_minu = original_image[
+                            x_begin:x_begin + 2 * patch_minu_radio,
+                            y_begin:y_begin + 2 * patch_minu_radio
+                        ]
 
-                        patch_minu = cv2.resize(patch_minu, dsize=(224, 224),interpolation=cv2.INTER_NEAREST)
+                        patch_minu = cv2.resize(
+                            patch_minu, dsize=(224, 224),
+                            interpolation=cv2.INTER_NEAREST
+                        )
 
-                        ret = np.empty((patch_minu.shape[0], patch_minu.shape[1], 3), dtype=np.uint8)
+                        ret = np.empty(
+                            (patch_minu.shape[0], patch_minu.shape[1], 3),
+                            dtype=np.uint8)
                         ret[:, :, 0] = patch_minu
                         ret[:, :, 1] = patch_minu
                         ret[:, :, 2] = patch_minu
@@ -964,18 +999,19 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
 
                         # # Can use class as hard decision
                         # # 0: minu  1: non-minu
-                        # [class_Minutiae] = np.argmax(model_FineNet.predict(patch_minu), axis=1)
+                        # [class_Minutiae] = np.argmax(
+                        #    model_FineNet.predict(patch_minu), axis=1)
                         #
                         # if class_Minutiae == 0:
                         #     mnt_refined.append(mnt_nms[idx_minu,:])
 
-
-                        # Use soft decision: merge FineNet score with CoarseNet score
+                        # Use soft decision: merge FineNet score with
+                        # CoarseNet score
                         [isMinutiaeProb] = model_FineNet.predict(patch_minu)
                         isMinutiaeProb = isMinutiaeProb[0]
-                        #print isMinutiaeProb
+                        # print isMinutiaeProb
                         tmp_mnt = mnt_nms[idx_minu, :].copy()
-                        tmp_mnt[3] = (4*tmp_mnt[3] + isMinutiaeProb)/5
+                        tmp_mnt[3] = (4 * tmp_mnt[3] + isMinutiaeProb) / 5
                         mnt_refined.append(tmp_mnt)
 
                     except:
@@ -983,31 +1019,46 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
         else:
             mnt_refined = mnt_nms
 
-        mnt_nms_backup = mnt_nms.copy()
+        # mnt_nms_backup = mnt_nms.copy()
         mnt_nms = np.array(mnt_refined)
 
         if mnt_nms.shape[0] > 0:
-            mnt_nms = mnt_nms[mnt_nms[:, 3] > final_minutiae_score_threashold, :]
+            mnt_nms = mnt_nms[
+                mnt_nms[:, 3] > final_minutiae_score_threashold, :]
 
-        final_mask = ndimage.zoom(np.round(np.squeeze(seg_out)), [8, 8], order=0)
+        final_mask = ndimage.zoom(
+            np.round(np.squeeze(seg_out)), [8, 8], order=0)
+
         # Show the orientation
-        show_orientation_field(original_image, dir_map + np.pi, mask=final_mask, fname="%s/%s/OF_results/%s_OF.jpg" % (output_dir, set_name, img_name[i]))
+        fname = "%s/OF_results/%s_OF.jpg" % (output_dir, img_name[i])
+        show_orientation_field(original_image, dir_map + np.pi,
+                               mask=final_mask, fname=fname)
 
         fuse_minu_orientation(dir_map, mnt_nms, mode=3)
 
         time_afterpost = time()
-        mnt_writer(mnt_nms, img_name[i], img_size, "%s/%s/mnt_results/%s.mnt"%(output_dir, set_name, img_name[i]))
-        draw_minutiae(original_image, mnt_nms, "%s/%s/%s_minu.jpg"%(output_dir, set_name, img_name[i]),saveimage=True)
+        fname = "%s/mnt_results/%s.mnt" % (output_dir, img_name[i])
+        mnt_writer(mnt_nms, img_name[i], img_size, fname)
 
-        misc.imsave("%s/%s/seg_results/%s_seg.jpg" % (output_dir, set_name, img_name[i]), final_mask)
+        fname = "%s/%s_minu.jpg" % (output_dir, img_name[i])
+        draw_minutiae(original_image, mnt_nms, fname, saveimage=True)
+
+        fname = "%s/seg_results/%s_seg.jpg" % (output_dir, img_name[i])
+        cv2.imwrite(fname, final_mask)
 
         time_afterdraw = time()
-        time_c.append([time_afterconv - time_start, time_afterpost - time_afterconv, time_afterdraw - time_afterpost])
+        time_c.append([
+            time_afterconv - time_start,
+            time_afterpost - time_afterconv,
+            time_afterdraw - time_afterpost
+        ])
         logging.info(
-            "load+conv: %.3fs, seg-postpro+nms: %.3f, draw: %.3f" % (time_c[-1][0], time_c[-1][1], time_c[-1][2]))
-
+            ("load+conv: %.3fs, seg-postpro+nms: %.3f, draw: %.3f" %
+             (time_c[-1][0], time_c[-1][1], time_c[-1][2])))
 
     # time_c = np.mean(np.array(time_c), axis=0)
     # logging.info(
-    #     "Average: load+conv: %.3fs, oir-select+seg-post+nms: %.3f, draw: %.3f" % (time_c[0], time_c[1], time_c[2]))
+    #     "Average: load+conv: %.3fs, oir-select+seg-post+"
+    #     "nms: %.3f, draw: %.3f" % (time_c[0], time_c[1], time_c[2])
+    # )
     return

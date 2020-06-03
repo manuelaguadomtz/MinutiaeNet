@@ -160,13 +160,12 @@ model.fit_generator(train_batches,
                     callbacks=callbacks)
 
 
-
 # Plot confusion matrix
 score = model.evaluate_generator(test_batches)
-print 'Test accuracy:', score[1]
+print('Test accuracy:', score[1])
 predictions = model.predict_generator(test_batches)
 test_labels = test_batches.classes[test_batches.index_array]
 
-cm = confusion_matrix(test_labels, np.argmax(predictions,axis=1))
-cm_plot_labels = ['minu','non_minu']
+cm = confusion_matrix(test_labels, np.argmax(predictions, axis=1))
+cm_plot_labels = ['minu', 'non_minu']
 plot_confusion_matrix(cm, cm_plot_labels, title='Confusion Matrix')

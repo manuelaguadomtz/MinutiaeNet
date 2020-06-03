@@ -86,11 +86,13 @@ Note that models as well as architectures here are slightly different from the p
 
 # Usage Python3
 
-Installing module future
+### Installing module future
 
     pip install future
 
-Running CoarseNet
+### Running MinutiaeNet
     
     cd CoarseNet
-    python CoarseNet_run.py
+    python CoarseNet_run.py --idir path/to/input/directory --odir path/for/output/features --FineNet --mode inference --itype .bmp
+
+To avoid using FineNet to refine minutiae do not use the --FineNet param. Available modes are "inference" and "deploy". Input directory should be organized as CoarseNet_train directory. mnt_files and seg_files inside directories can be omitted when running the script in "inference" mode.

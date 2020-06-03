@@ -1,11 +1,13 @@
-"""Code for FineNet in paper "Robust Minutiae Extractor: Integrating Deep Networks and Fingerprint Domain Knowledge" at ICB 2018
+"""Code for FineNet in paper "Robust Minutiae Extractor: Integrating
+  Deep Networks and Fingerprint Domain Knowledge" at ICB 2018
   https://arxiv.org/pdf/1712.09401.pdf
 
   If you use whole or partial function in this code, please cite paper:
 
   @inproceedings{Nguyen_MinutiaeNet,
     author    = {Dinh-Luan Nguyen and Kai Cao and Anil K. Jain},
-    title     = {Robust Minutiae Extractor: Integrating Deep Networks and Fingerprint Domain Knowledge},
+    title     = {Robust Minutiae Extractor: Integrating Deep
+                 Networks and Fingerprint Domain Knowledge},
     booktitle = {The 11th International Conference on Biometrics, 2018},
     year      = {2018},
     }
@@ -14,8 +16,18 @@
 from __future__ import absolute_import
 from __future__ import division
 
+import keras
+
 from keras.models import Model
-from keras.layers import Activation, AveragePooling2D, BatchNormalization, Concatenate, Conv2D, Dense, GlobalAveragePooling2D
+from keras.layers import (
+    Activation,
+    AveragePooling2D,
+    BatchNormalization,
+    Concatenate,
+    Conv2D,
+    Dense,
+    GlobalAveragePooling2D
+)
 from keras.layers import Input, Lambda, MaxPooling2D
 from keras.applications.imagenet_utils import _obtain_input_shape
 from keras import backend as K
@@ -23,10 +35,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import itertools
 
-def preprocess_input(x):
-    """Preprocesses a numpy array encoding a batch of images.
 
-    """
+def preprocess_input(x):
+    """Preprocesses a numpy array encoding a batch of images."""
     return keras.applications.imagenet_utils.preprocess_input(x, mode='tf')
 
 
@@ -104,7 +115,8 @@ def inception_resnet_block(x, scale, block_type, block_idx, activation='relu'):
         x = Activation(activation, name=block_name + '_ac')(x)
     return x
 
-def FineNetmodel(num_classes = 2, pretrained_path = None, input_shape = None):
+
+def FineNetmodel(num_classes=2, pretrained_path=None, input_shape=None):
     """Create FineNet architecture.
 
     """
@@ -116,7 +128,6 @@ def FineNetmodel(num_classes = 2, pretrained_path = None, input_shape = None):
         data_format=K.image_data_format(),
         require_flatten=False,
         weights=pretrained_path)
-
 
     img_input = Input(shape=input_shape)
 
