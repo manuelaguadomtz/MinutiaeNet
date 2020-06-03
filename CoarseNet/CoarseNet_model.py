@@ -634,6 +634,7 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
     mkdir(output_dir + '/mnt_results/')
     mkdir(output_dir + '/seg_results/')
     mkdir(output_dir + '/OF_results/')
+    mkdir(output_dir + '/enhance_results/')
 
     # logging.info("Predicting %s:" % (set_name))
 
@@ -694,6 +695,24 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
         mnt_h_out, mnt_s_out = prediction[8:10]
 
         time_afterconv = time()
+
+        # Normalizing enhanced images
+        enh_img = normalize(enh_img[0, :, :, 0], 0, 255)
+        enh_img_imag = normalize(enh_img_imag[0, :, :, 0], 0, 255)
+        enhance_img = normalize(enhance_img[0, :, :, 0], 0, 255)
+
+        # saving enhanced images
+        fname = ("%s/enhance_results/%s_enh_img.jpg" %
+                 (output_dir, img_name[i]))
+        cv2.imwrite(fname, enh_img)
+
+        fname = ("%s/enhance_results/%s_enh_img_imag.jpg" %
+                 (output_dir, img_name[i]))
+        cv2.imwrite(fname, enh_img_imag)
+
+        fname = ("%s/enhance_results/%s_enhance_img.jpg" %
+                 (output_dir, img_name[i]))
+        cv2.imwrite(fname, enhance_img)
 
         # Use post processing to smooth image
         round_seg = np.round(np.squeeze(seg_out))
@@ -813,7 +832,7 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
                                          fname, saveimage=True)
 
         fname = ("%s/seg_results/%s_seg.jpg" % (output_dir, img_name[i]))
-        cv2.imwrite(fname, final_mask)
+        cv2.imwrite(fname, (final_mask * 255).astype(np.uint8))
 
         time_afterdraw = time()
         time_c.append([
@@ -847,10 +866,10 @@ def deploy_with_GT(deploy_set, output_dir, model_path,
 def inference(deploy_set, output_dir, model_path, FineNet_path=None,
               set_name=None, file_ext='.bmp', isHavingFineNet=False):
 
-    mkdir(output_dir + '/')
     mkdir(output_dir + '/mnt_results/')
     mkdir(output_dir + '/seg_results/')
     mkdir(output_dir + '/OF_results/')
+    mkdir(output_dir + '/enhance_results/')
 
     _, img_name = get_files_in_folder(deploy_set + 'img_files/', file_ext)
     print(deploy_set)
@@ -912,6 +931,24 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
         mnt_h_out, mnt_s_out = prediction[8:10]
 
         time_afterconv = time()
+
+        # Normalizing enhanced images
+        enh_img = normalize(enh_img[0, :, :, 0], 0, 255)
+        enh_img_imag = normalize(enh_img_imag[0, :, :, 0], 0, 255)
+        enhance_img = normalize(enhance_img[0, :, :, 0], 0, 255)
+
+        # saving enhanced images
+        fname = ("%s/enhance_results/%s_enh_img.jpg" %
+                 (output_dir, img_name[i]))
+        cv2.imwrite(fname, enh_img)
+
+        fname = ("%s/enhance_results/%s_enh_img_imag.jpg" %
+                 (output_dir, img_name[i]))
+        cv2.imwrite(fname, enh_img_imag)
+
+        fname = ("%s/enhance_results/%s_enhance_img.jpg" %
+                 (output_dir, img_name[i]))
+        cv2.imwrite(fname, enhance_img)
 
         # If use mask from model
         round_seg = np.round(np.squeeze(seg_out))
