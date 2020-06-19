@@ -1036,20 +1036,20 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
 
                         # # Can use class as hard decision
                         # # 0: minu  1: non-minu
-                        # [class_Minutiae] = np.argmax(
-                        #    model_FineNet.predict(patch_minu), axis=1)
-                        #
-                        # if class_Minutiae == 0:
-                        #     mnt_refined.append(mnt_nms[idx_minu,:])
+                        [class_Minutiae] = np.argmax(
+                            model_FineNet.predict(patch_minu), axis=1)
+
+                        if class_Minutiae == 0:
+                            mnt_refined.append(mnt_nms[idx_minu, :])
 
                         # Use soft decision: merge FineNet score with
                         # CoarseNet score
-                        [isMinutiaeProb] = model_FineNet.predict(patch_minu)
-                        isMinutiaeProb = isMinutiaeProb[0]
+                        # [isMinutiaeProb] = model_FineNet.predict(patch_minu)
+                        # isMinutiaeProb = isMinutiaeProb[0]
                         # print isMinutiaeProb
-                        tmp_mnt = mnt_nms[idx_minu, :].copy()
-                        tmp_mnt[3] = (4 * tmp_mnt[3] + isMinutiaeProb) / 5
-                        mnt_refined.append(tmp_mnt)
+                        # tmp_mnt = mnt_nms[idx_minu, :].copy()
+                        # tmp_mnt[3] = (4 * tmp_mnt[3] + isMinutiaeProb) / 5
+                        # mnt_refined.append(tmp_mnt)
 
                     except:
                         mnt_refined.append(mnt_nms[idx_minu, :])
