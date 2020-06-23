@@ -964,7 +964,7 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
         # seg_out = cv2.resize(mask, dsize=(seg_out.shape[1],
         #                                    seg_out.shape[0]))
 
-        max_num_minu = 20
+        max_num_minu = 150
         min_num_minu = 6
 
         early_minutiae_thres = 0.5
@@ -1081,7 +1081,7 @@ def inference(deploy_set, output_dir, model_path, FineNet_path=None,
         draw_minutiae(original_image, mnt_nms, fname, saveimage=True)
 
         fname = "%s/seg_results/%s_seg.jpg" % (output_dir, img_name[i])
-        cv2.imwrite(fname, final_mask)
+        cv2.imwrite(fname, final_mask.astype(np.uint8) * 255)
 
         time_afterdraw = time()
         time_c.append([
